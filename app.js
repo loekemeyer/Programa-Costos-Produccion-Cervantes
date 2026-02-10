@@ -276,13 +276,16 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     };
 
-    const renderLast2 = (arr) => {
-      if (!arr || !arr.length) return `<div class="day-item"><div class="t1">Últimos 2 mensajes del día</div><div class="t2">—</div></div>`;
+    const renderLast5 = (arr) => {
+      if (!arr || !arr.length) {
+        return `<div class="day-item"><div class="t1">Últimos 5 mensajes del día</div><div class="t2">—</div></div>`;
+      }
+    
       return `
         <div class="day-item">
-          <div class="t1">Últimos 2 mensajes del día</div>
+          <div class="t1">Últimos 5 mensajes del día</div>
           <div class="t2">
-            ${arr.map(it => `
+            ${arr.slice(0,5).map(it => `
               <div style="margin-top:6px;">
                 <b>${it.opcion}</b> — ${it.descripcion}
                 ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
@@ -293,16 +296,13 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     };
 
+
     daySummary.className = "";
     daySummary.innerHTML = [
       qLen ? `<div class="day-item"><div class="t1">Pendientes de envío</div><div class="t2"><b>${qLen}</b></div></div>` : "",
-      renderItem("Última Matriz (E)", s.lastMatrix),
-      renderItem("Último Cajón (C)", s.lastCajon),
-      renderLast2(s.last2),
-      renderItem("Último Tiempo Muerto", s.lastDowntime),
-      // ✅ opcional: mostrar aviso en resumen
-      s.matrixNeedsC ? `<div class="day-item"><div class="t1">Matriz</div><div class="t2">⚠️ Falta enviar al menos 1 <b>C</b></div></div>` : ""
+      renderLast5(s.last2)
     ].join("");
+
   }
 
   function renderMatrizInfoForCajon() {
@@ -523,7 +523,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function pushLast2(s, payload) {
     const item = { opcion:payload.opcion, descripcion:payload.descripcion, texto:payload.texto||"", ts:payload.tsEvent };
     s.last2.unshift(item);
-    s.last2 = s.last2.slice(0,2);
+    s.last2 = s.last2.slice(0,5);
   }
 
   function updateStateAfterSend(legajo, payload) {
