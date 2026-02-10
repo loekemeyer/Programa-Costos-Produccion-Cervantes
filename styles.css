@@ -1,35 +1,33 @@
 body{font-family:Arial,sans-serif;margin:0;padding:12px;}
 .hidden{display:none;}
 
-.row-6 { gap: 8px; }
-.row-6 .box { padding: 10px 4px; }
-.row-6 .box-title { font-size: 18px; }
-.row-6 .box-desc { font-size: 10px; }
-
-
 button{
-  width:100%;padding:16px;font-size:22px;
-  margin-top:14px;border-radius:6px;
+  width:100%;
+  padding:16px;
+  font-size:22px;
+  margin-top:14px;
+  border-radius:6px;
 }
 .primary-btn{background:#1e6bd6;color:#fff;border:none;}
 
 #legajoScreen h1{font-size:34px;text-align:center;}
 #legajoInput{width:100%;font-size:32px;padding:12px;text-align:center;}
 
-.row { 
-  width: 100%;
-  box-sizing: border-box;
+/* ===================== GRILLAS DE OPCIONES ===================== */
+.row{
+  display:grid;
+  gap:10px;
+  margin-top:12px;
+  width:100%;
+  box-sizing:border-box;
 }
-.box { box-sizing: border-box; }
+.row-2{grid-template-columns:repeat(2, minmax(0,1fr));}
+.row-5{grid-template-columns:repeat(5, minmax(0,1fr));}
+.row-6{grid-template-columns:repeat(6, minmax(0,1fr));}
 
-
-.row{display:grid;gap:10px;margin-top:12px;}
-.row-2{grid-template-columns:repeat(2,1fr);}
-.row-5{grid-template-columns:repeat(5,1fr);}
-.row-6{grid-template-columns:repeat(6, minmax(0, 1fr));}
-
-
+/* ===================== BOX ===================== */
 .box{
+  box-sizing:border-box;
   border:2px solid #333;
   padding:12px 6px;
   text-align:center;
@@ -38,28 +36,40 @@ button{
 .box-title{font-size:20px;font-weight:bold;}
 .box-desc{font-size:11px;margin-top:4px;}
 
+/* ===================== TOP BAR ===================== */
 .top-bar{display:flex;align-items:center;margin-bottom:6px;}
 .back-top{font-size:26px;cursor:pointer;}
 .back-label{font-size:14px;margin-left:8px;color:#444;cursor:pointer;}
 
+/* ===================== SELECCIÓN ===================== */
 .selected-container{
-  display:flex;align-items:center;justify-content:center;margin-top:16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:16px;
 }
 .back-arrow{font-size:30px;cursor:pointer;margin-right:10px;}
 .selected-box{
   border:2px solid #333;
   padding:10px 22px;
-  font-size:28px;font-weight:bold;
+  font-size:28px;
+  font-weight:bold;
   color:#1e6bd6;
 }
 .selected-desc{
-  margin-left:12px;font-size:18px;font-weight:bold;
+  margin-left:12px;
+  font-size:18px;
+  font-weight:bold;
 }
 
+/* ===================== INPUT ===================== */
 .label{margin-top:14px;font-size:22px;text-align:center;}
 .text-input{
-  width:100%;height:70px;font-size:64px;
-  text-align:center;margin-top:8px;
+  width:100%;
+  height:70px;
+  font-size:64px;
+  text-align:center;
+  margin-top:8px;
 }
 .text-input::placeholder{font-size:26px;color:#aaa;}
 .error{color:red;margin-top:8px;font-size:18px;}
@@ -78,10 +88,7 @@ button{
   color:#333;
   margin-bottom:8px;
 }
-.history-empty{
-  color:#777;
-  font-size:14px;
-}
+.history-empty{color:#777;font-size:14px;}
 .day-item{
   border:1px solid #e3e3e3;
   background:#fff;
@@ -100,6 +107,7 @@ button{
   color:#333;
 }
 
+/* ===================== MATRIZ INFO ===================== */
 .matriz-info{
   margin-top:12px;
   padding:10px;
@@ -117,10 +125,18 @@ button{
   font-weight:normal;
   color:#444;
 }
-/* ====== BOTÓN SELECCIONADO (verde) ====== */
+
+/* ===================== BOTÓN SELECCIONADO (verde) ===================== */
 .box.selected{
   border-color:#1aa34a !important;
   background:#eafff1;
   box-shadow:0 0 0 2px rgba(26,163,74,.25);
 }
-.box.selected .box-title{ color:#1aa34a; }
+.box.selected .box-title{color:#1aa34a;}
+
+/* ===================== AJUSTE ESPECÍFICO FILA 6 ===================== */
+/* Esto va al FINAL para que no lo pise .box */
+.row-6{gap:8px;}
+.row-6 .box{padding:10px 4px;}
+.row-6 .box-title{font-size:18px;}
+.row-6 .box-desc{font-size:10px;}
