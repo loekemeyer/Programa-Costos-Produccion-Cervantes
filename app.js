@@ -275,17 +275,35 @@ document.addEventListener("DOMContentLoaded", () => {
 }
 
   function renderSummary() {
-    daySummary.className = "";
+  const leg = legajoKey();   // 👈 ESTA LÍNEA FALTABA
+  const qLen = queueLength();
 
-    daySummary.innerHTML = [
-      qLen ? `<div class="day-item">
-                <div class="t1">Pendientes de envío</div>
-                <div class="t2"><b>${qLen}</b></div>
-              </div>` : "",
-      renderLast5(s.last2)
-    ].join("");
+  if (!leg) {
+    daySummary.className = "history-empty";
+    daySummary.innerText = "Ingresá tu legajo para ver los últimos mensajes";
+    return;
+  }
 
-    }
+  const s = readStateForLegajo(leg);  // 👈 ahora sí existe leg
+
+  daySummary.className = "";
+
+  const parts = [];
+
+  if (qLen) {
+    parts.push(
+      '<div class="day-item">' +
+        '<div class="t1">Pendientes de envío</div>' +
+        `<div class="t2"><b>${qLen}</b></div>` +
+      '</div>'
+    );
+  }
+
+  parts.push(renderLast5(s.last2));
+
+  daySummary.innerHTML = parts.join("");
+}
+
 
     const s = readStateForLegajo(leg);
     const qLen = queueLength();
