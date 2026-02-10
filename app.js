@@ -163,12 +163,13 @@ document.addEventListener("DOMContentLoaded", () => {
     {code:"AL",desc:"Ayuda Logística",row:3,input:{show:false}},
     {code:"PR",desc:"Paré Carga Rollo",row:3,input:{show:false}},
     {code:"CM",desc:"Cambiar Matriz",row:3,input:{show:false}},
+    {code:"PM",desc:"Paré Matriz",row:3,input:{show:false}},
     {code:"RM",desc:"Rotura Matriz",row:3,input:{show:false}},
     {code:"PC",desc:"Paré Comida",row:3,input:{show:false}},
     {code:"RD",desc:"Rollo Fleje Doblado",row:3,input:{show:false}}
   ];
 
-  const NON_DOWNTIME_CODES = new Set(["E","C","RM","RD","LT"]);
+  const NON_DOWNTIME_CODES = new Set(["E","C","RM","PM","RD","LT"]);
   const isDowntime = (op) => !NON_DOWNTIME_CODES.has(op);
 
   const sameDowntime = (a,b) =>
@@ -339,9 +340,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function isAllowedWhenPending(optCode, pending) {
     if (!pending) return true;
-    if (optCode === "RM" || optCode === "RD") return true;
+    if (optCode === "RM" || optCode === "PM" || optCode === "RD") return true;
     return String(optCode) === String(pending.opcion);
   }
+
 
   // ✅ NUEVO: regla de matriz -> bloquea E hasta que exista al menos 1 C después del último E
   function isAllowedByMatrixRule(optCode, state) {
@@ -506,7 +508,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!ld) return { ok:true };
 
-    if (payload.opcion === "RM" || payload.opcion === "RD") {
+    if (payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
       return { ok:true };
     }
 
@@ -564,7 +566,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (payload.opcion === "RM" || payload.opcion === "RD") {
+    if (payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
       s.lastDowntime = null;
       writeStateForLegajo(legajo, s);
       return;
@@ -756,7 +758,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
 
-    if (payload.opcion === "C" || payload.opcion === "RM" || payload.opcion === "RD") {
+    if (payload.opcion === "C" || payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
       if (!stateBefore.lastMatrix || !stateBefore.lastMatrix.ts || !stateBefore.lastMatrix.texto) {
         alert('Primero tenés que enviar "E (Empecé Matriz)" para registrar una matriz.');
         return;
@@ -768,9 +770,10 @@ document.addEventListener("DOMContentLoaded", () => {
       payload["Hs Inicio"] = computeHsInicioForC(stateBefore);
     }
 
-    if (payload.opcion === "RM" || payload.opcion === "RD") {
+    if (payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
       payload["Hs Inicio"] = tsEvent;
     }
+
 
     const v = validateBeforeSend(legajo, payload);
     if (!v.ok) { alert(v.msg); return; }
