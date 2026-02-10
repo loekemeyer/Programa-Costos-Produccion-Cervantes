@@ -121,6 +121,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const row1 = $("row1");
   const row2 = $("row2");
   const row3 = $("row3");
+  const row4 = $("row4");
+
 
   const selectedArea = $("selectedArea");
   const selectedBox  = $("selectedBox");
@@ -138,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const required = {
     legajoScreen, optionsScreen, legajoInput,
     btnContinuar, btnBackTop, btnBackLabel,
-    row1, row2, row3,
+    row1, row2, row3,row4,
     selectedArea, selectedBox, selectedDesc, inputArea, inputLabel, textInput,
     btnResetSelection, btnEnviar, error,
     daySummary, matrizInfo
@@ -162,9 +164,9 @@ document.addEventListener("DOMContentLoaded", () => {
     {code:"Perm",desc:"Permiso",row:2,input:{show:false}},
     {code:"AL",desc:"Ayuda Logística",row:3,input:{show:false}},
     {code:"PR",desc:"Paré Carga Rollo",row:3,input:{show:false}},
-    {code:"CM",desc:"Cambiar Matriz",row:3,input:{show:false}},
-    {code:"PM",desc:"Paré Matriz",row:3,input:{show:false}},
-    {code:"RM",desc:"Rotura Matriz",row:3,input:{show:false}},
+    {code:"CM",desc:"Cambiar Matriz",row:4,input:{show:false}},
+    {code:"PM",desc:"Paré Matriz",row:4,input:{show:false}},
+    {code:"RM",desc:"Rotura Matriz",row:4,input:{show:false}},
     {code:"PC",desc:"Paré Comida",row:3,input:{show:false}},
     {code:"RD",desc:"Rollo Fleje Doblado",row:3,input:{show:false}}
   ];
@@ -365,7 +367,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderOptions() {
-    row1.innerHTML=""; row2.innerHTML=""; row3.innerHTML="";
+    row1.innerHTML=""; row2.innerHTML=""; row3.innerHTML=""; row4.innerHTML="";
     const pending = getPendingDowntime();
 
     const leg = legajoKey();
@@ -387,7 +389,14 @@ document.addEventListener("DOMContentLoaded", () => {
         d.addEventListener("click",()=>selectOption(o, d));
       }
 
-      (o.row===1?row1:o.row===2?row2:row3).appendChild(d);
+      const target =
+        o.row === 1 ? row1 :
+        o.row === 2 ? row2 :
+        o.row === 3 ? row3 :
+        row4; // row 4
+      
+      target.appendChild(d);
+
     });
 
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
