@@ -304,24 +304,24 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const renderLast2 = (arr) => {
-      if (!arr || !arr.length) return `<div class="day-item"><div class="t1">Últimos 2 mensajes del día</div><div class="t2">—</div></div>`;
-      return `
-        <div class="day-item">
-          <div class="t1">Últimos 2 mensajes del día</div>
-          <div class="t2">
-            ${arr.map(it => `
-              <div style="margin-top:6px;">
-                <b>${it.opcion}</b> — ${it.descripcion}
-                ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
-                ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
+          if (!arr || !arr.length) return `<div class="day-item"><div class="t1">Últimos 2 mensajes del día</div><div class="t2">—</div></div>`;
+          return `
+            <div class="day-item">
+              <div class="t1">Últimos 2 mensajes del día</div>
+              <div class="t2">
+                ${arr.map(it => `
+                  <div style="margin-top:6px;">
+                    <b>${it.opcion}</b> — ${it.descripcion}
+                    ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
+                    ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
+                  </div>
+                `).join("")}
               </div>
-            `).join("")}
-          </div>
-        </div>`;
-    };
-
+            </div>`;
+        };
     
-  }
+        
+      
 
   function renderMatrizInfoForCajon() {
     const leg = legajoKey();
