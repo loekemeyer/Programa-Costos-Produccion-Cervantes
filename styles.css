@@ -1,6 +1,12 @@
 body{font-family:Arial,sans-serif;margin:0;padding:12px;}
 .hidden{display:none;}
 
+.row-6 { gap: 8px; }
+.row-6 .box { padding: 10px 4px; }
+.row-6 .box-title { font-size: 18px; }
+.row-6 .box-desc { font-size: 10px; }
+
+
 button{
   width:100%;padding:16px;font-size:22px;
   margin-top:14px;border-radius:6px;
