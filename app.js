@@ -251,40 +251,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ================= UI: RESUMEN ================= */
-  function renderLast5(arr) {
-  if (!arr || !arr.length) {
-    return `<div class="day-item">
-              <div class="t1">Últimos 5 mensajes</div>
-              <div class="t2">—</div>
-            </div>`;
-  }
-
-  return `
-    <div class="day-item">
-      <div class="t1">Últimos 5 mensajes</div>
-      <div class="t2">
-        ${arr.map(it => `
-          <div style="margin-top:6px;">
-            <b>${it.opcion}</b> — ${it.descripcion}
-            ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
-            ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
-          </div>
-        `).join("")}
-      </div>
-    </div>`;
-}
-
   function renderSummary() {
-    daySummary.className = "";
+    const leg = legajoKey();
 
-    daySummary.innerHTML = [
-      qLen ? `<div class="day-item">
-                <div class="t1">Pendientes de envío</div>
-                <div class="t2"><b>${qLen}</b></div>
-              </div>` : "",
-      renderLast5(s.last2)
-    ].join("");
-
+    if (!leg) {
+      daySummary.className = "history-empty";
+      daySummary.innerText = "Ingresá tu legajo para ver el resumen";
+      return;
     }
 
     const s = readStateForLegajo(leg);
@@ -320,7 +293,16 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     };
 
-    
+    daySummary.className = "";
+    daySummary.innerHTML = [
+      qLen ? `<div class="day-item"><div class="t1">Pendientes de envío</div><div class="t2"><b>${qLen}</b></div></div>` : "",
+      renderItem("Última Matriz (E)", s.lastMatrix),
+      renderItem("Último Cajón (C)", s.lastCajon),
+      renderLast2(s.last2),
+      renderItem("Último Tiempo Muerto", s.lastDowntime),
+      // ✅ opcional: mostrar aviso en resumen
+      s.matrixNeedsC ? `<div class="day-item"><div class="t1">Matriz</div><div class="t2">⚠️ Falta enviar al menos 1 <b>C</b></div></div>` : ""
+    ].join("");
   }
 
   function renderMatrizInfoForCajon() {
@@ -407,7 +389,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
     if (!pending && state && state.matrixNeedsC) {
       error.style.color = "#b26a00";
-      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.`;
+      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenés que enviar al menos 1 Cajón (C).`;
     }
 
     if (pending) {
@@ -473,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
     if (!pending && state && state.matrixNeedsC) {
       error.style.color = "#b26a00";
-      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.`;
+      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenés que enviar al menos 1 Cajón (C).`;
     } else if (!pending) {
       error.style.color = "";
       error.innerText = "";
@@ -539,17 +521,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ================= ACTUALIZAR ESTADO ================= */
   function pushLast2(s, payload) {
-    const item = {
-      opcion: payload.opcion,
-      descripcion: payload.descripcion,
-      texto: payload.texto || "",
-      ts: payload.tsEvent
-    };
-  
+    const item = { opcion:payload.opcion, descripcion:payload.descripcion, texto:payload.texto||"", ts:payload.tsEvent };
     s.last2.unshift(item);
-    s.last2 = s.last2.slice(0,5); // 👈 ahora guarda 5
+    s.last2 = s.last2.slice(0,2);
   }
-
 
   function updateStateAfterSend(legajo, payload) {
     const s = readStateForLegajo(legajo);
