@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registro Producción</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- opcional: evita el 404 del favicon -->
+  <link rel="icon" href="data:,">
+</head>
+
+<body>
+
+  <!-- LEGAJO -->
+  <div id="legajoScreen">
+    <h1>Ingresá tu número de Operario</h1>
+    <input id="legajoInput" type="number" inputmode="numeric">
+    <button id="btnContinuar" class="primary-btn">Continuar</button>
+
+    <!-- RESUMEN COOKIES DEL DÍA -->
+    <div class="history-wrap">
+      <div class="history-title">Resumen del día (en este dispositivo)</div>
+      <div id="daySummary" class="history-empty">Ingresá tu legajo para ver el resumen</div>
+    </div>
+  </div>
+
+  <!-- OPCIONES -->
+  <div id="optionsScreen" class="hidden">
+
+    <div class="top-bar">
+      <div id="btnBackTop" class="back-top">←</div>
+      <div id="btnBackLabel" class="back-label">Volver a pantalla inicial</div>
+    </div>
+
+    <div class="row row-2" id="row1"></div>
+    <div class="row row-5" id="row2"></div>
+    <div class="row row-6" id="row3"></div>
+
+    <div id="selectedArea" class="hidden">
+      <div class="selected-container">
+        <div id="btnResetSelection" class="back-arrow">←</div>
+        <div id="selectedBox" class="selected-box"></div>
+        <div id="selectedDesc" class="selected-desc"></div>
+      </div>
+
+      <div id="inputArea" class="hidden">
+        <div id="inputLabel" class="label"></div>
+        <input id="textInput" class="text-input">
+      </div>
+
+      <!-- INFO MATRIZ (solo para Cajón) -->
+      <div id="matrizInfo" class="matriz-info hidden"></div>
+
+      <button id="btnEnviar" class="primary-btn">Enviar</button>
+      <div id="error" class="error"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
