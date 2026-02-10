@@ -1,3 +1,5 @@
+
+Dijiste:
 document.addEventListener("DOMContentLoaded", () => {
 
   const GOOGLE_SHEET_WEBAPP_URL =
@@ -54,14 +56,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const APP_TAG = "_Cervantes";
   const VERSION = "_v1";
 
-  const MIGRATION_FLAG = `prod_migrated${APP_TAG}${VERSION}`;
-  const LS_PREFIX      = `prod_state${APP_TAG}${VERSION}`;
-  const LS_QUEUE       = `prod_queue${APP_TAG}${VERSION}`;
-  const DAY_GUARD_KEY  = `prod_day_guard${APP_TAG}${VERSION}`;
+  const MIGRATION_FLAG = prod_migrated${APP_TAG}${VERSION};
+  const LS_PREFIX      = prod_state${APP_TAG}${VERSION};
+  const LS_QUEUE       = prod_queue${APP_TAG}${VERSION};
+  const DAY_GUARD_KEY  = prod_day_guard${APP_TAG}${VERSION};
 
   /* ================= RESET DIARIO ================= */
   function clearAllCervantesData() {
-    const statePrefix = `${LS_PREFIX}::`;
+    const statePrefix = ${LS_PREFIX}::;
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
 
@@ -89,8 +91,8 @@ document.addEventListener("DOMContentLoaded", () => {
       "prod_day_state_v7",
       "prod_state_ls_v1",
       "prod_queue_v1",
-      `prod_state${APP_TAG}${VERSION}`,
-      `prod_queue${APP_TAG}${VERSION}`,
+      prod_state${APP_TAG}${VERSION},
+      prod_queue${APP_TAG}${VERSION},
     ].forEach(k => localStorage.removeItem(k));
 
     localStorage.setItem(MIGRATION_FLAG, "1");
@@ -104,7 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     const hex = [...bytes].map(b => b.toString(16).padStart(2, "0")).join("");
-    return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    return ${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)};
   }
 
   /* ================= ELEMENTOS ================= */
@@ -184,7 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function stateKeyFor(legajo) {
-    return `${LS_PREFIX}::${todayKeyAR()}::${String(legajo).trim()}`;
+    return ${LS_PREFIX}::${todayKeyAR()}::${String(legajo).trim()};
   }
 
   function freshState() {
@@ -251,95 +253,59 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ================= UI: RESUMEN ================= */
-  function renderLast5(arr) {
-  if (!arr || !arr.length) {
-    return `<div class="day-item">
-              <div class="t1">Últimos 5 mensajes</div>
-              <div class="t2">—</div>
-            </div>`;
-  }
-
-  return `
-    <div class="day-item">
-      <div class="t1">Últimos 5 mensajes</div>
-      <div class="t2">
-        ${arr.map(it => `
-          <div style="margin-top:6px;">
-            <b>${it.opcion}</b> — ${it.descripcion}
-            ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
-            ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
-          </div>
-        `).join("")}
-      </div>
-    </div>`;
-}
-
   function renderSummary() {
-  const leg = legajoKey();   // 👈 ESTA LÍNEA FALTABA
-  const qLen = queueLength();
+    const leg = legajoKey();
 
-  if (!leg) {
-    daySummary.className = "history-empty";
-    daySummary.innerText = "Ingresá tu legajo para ver los últimos mensajes";
-    return;
-  }
-
-  const s = readStateForLegajo(leg);  // 👈 ahora sí existe leg
-
-  daySummary.className = "";
-
-  const parts = [];
-
-  if (qLen) {
-    parts.push(
-      '<div class="day-item">' +
-        '<div class="t1">Pendientes de envío</div>' +
-        `<div class="t2"><b>${qLen}</b></div>` +
-      '</div>'
-    );
-  }
-
-  parts.push(renderLast5(s.last2));
-
-  daySummary.innerHTML = parts.join("");
-}
-
+    if (!leg) {
+      daySummary.className = "history-empty";
+      daySummary.innerText = "Ingresá tu legajo para ver el resumen";
+      return;
+    }
 
     const s = readStateForLegajo(leg);
     const qLen = queueLength();
 
     const renderItem = (title, item) => {
-      if (!item) return `<div class="day-item"><div class="t1">${title}</div><div class="t2">—</div></div>`;
-      return `
+      if (!item) return <div class="day-item"><div class="t1">${title}</div><div class="t2">—</div></div>;
+      return 
         <div class="day-item">
           <div class="t1">${title}</div>
           <div class="t2">
             ${item.opcion} — ${item.descripcion}<br>
-            ${item.texto ? `Dato: <b>${item.texto}</b><br>` : ""}
-            ${item.ts ? `Fecha: ${formatDateTimeAR(item.ts)}` : ""}
+            ${item.texto ? Dato: <b>${item.texto}</b><br> : ""}
+            ${item.ts ? Fecha: ${formatDateTimeAR(item.ts)} : ""}
           </div>
-        </div>`;
+        </div>;
     };
 
     const renderLast2 = (arr) => {
-          if (!arr || !arr.length) return `<div class="day-item"><div class="t1">Últimos 2 mensajes del día</div><div class="t2">—</div></div>`;
-          return `
-            <div class="day-item">
-              <div class="t1">Últimos 2 mensajes del día</div>
-              <div class="t2">
-                ${arr.map(it => `
-                  <div style="margin-top:6px;">
-                    <b>${it.opcion}</b> — ${it.descripcion}
-                    ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
-                    ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
-                  </div>
-                `).join("")}
+      if (!arr || !arr.length) return <div class="day-item"><div class="t1">Últimos 2 mensajes del día</div><div class="t2">—</div></div>;
+      return 
+        <div class="day-item">
+          <div class="t1">Últimos 2 mensajes del día</div>
+          <div class="t2">
+            ${arr.map(it => 
+              <div style="margin-top:6px;">
+                <b>${it.opcion}</b> — ${it.descripcion}
+                ${it.texto ?  | Dato: <b>${it.texto}</b> : ""}
+                ${it.ts ? <br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span> : ""}
               </div>
-            </div>`;
-        };
-    
-        
-      
+            ).join("")}
+          </div>
+        </div>;
+    };
+
+    daySummary.className = "";
+    daySummary.innerHTML = [
+      qLen ? <div class="day-item"><div class="t1">Pendientes de envío</div><div class="t2"><b>${qLen}</b></div></div> : "",
+      renderItem("Última Matriz (E)", s.lastMatrix),
+      renderItem("Último Cajón (C)", s.lastCajon),
+      renderLast2(s.last2),
+      renderItem("Último Tiempo Muerto", s.lastDowntime),
+      // ✅ opcional: mostrar aviso en resumen
+      s.matrixNeedsC ? <div class="day-item"><div class="t1">Matriz</div><div class="t2">⚠️ Falta enviar al menos 1 <b>C</b></div></div> : ""
+    ].join("");
+  }
 
   function renderMatrizInfoForCajon() {
     const leg = legajoKey();
@@ -354,13 +320,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     matrizInfo.classList.remove("hidden");
     if (!lm || !lm.texto) {
-      matrizInfo.innerHTML = `⚠️ No hay matriz registrada hoy.<br><small>Enviá primero "E (Empecé Matriz)"</small>`;
+      matrizInfo.innerHTML = ⚠️ No hay matriz registrada hoy.<br><small>Enviá primero "E (Empecé Matriz)"</small>;
       return;
     }
 
     matrizInfo.innerHTML =
-      `Matriz en uso: <span style="font-size:22px;">${lm.texto}</span>
-       <small>Última matriz: ${lm.ts ? formatDateTimeAR(lm.ts) : ""}</small>`;
+      Matriz en uso: <span style="font-size:22px;">${lm.texto}</span>
+       <small>Última matriz: ${lm.ts ? formatDateTimeAR(lm.ts) : ""}</small>;
   }
 
   /* ================= BLOQUEO UI POR TM PENDIENTE ================= */
@@ -407,7 +373,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const d=document.createElement("div");
       d.className="box";
       d.dataset.code = o.code;
-      d.innerHTML=`<div class="box-title">${o.code}</div><div class="box-desc">${o.desc}</div>`;
+      d.innerHTML=<div class="box-title">${o.code}</div><div class="box-desc">${o.desc}</div>;
 
       const allowedPending = isAllowedWhenPending(o.code, pending);
       const allowedMatrix  = isAllowedByMatrixRule(o.code, state);
@@ -425,20 +391,20 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
     if (!pending && state && state.matrixNeedsC) {
       error.style.color = "#b26a00";
-      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.`;
+      error.innerText = ⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.;
     }
 
     if (pending) {
       const opt = OPTIONS.find(x => x.code === pending.opcion);
       if (opt) {
-        const el = document.querySelector(`.box[data-code="${opt.code}"]`);
+        const el = document.querySelector(.box[data-code="${opt.code}"]);
         selectOption(opt, el);
         btnResetSelection.style.opacity = "0.4";
         btnResetSelection.style.pointerEvents = "none";
         error.style.color = "#b26a00";
         error.innerText =
-          `⚠️ Hay un Tiempo Muerto pendiente (${pending.opcion}). ` +
-          `Solo podés reenviar el mismo para cerrarlo, o enviar RM/RD.`;
+          ⚠️ Hay un Tiempo Muerto pendiente (${pending.opcion}).  +
+          Solo podés reenviar el mismo para cerrarlo, o enviar RM/RD.;
       }
     } else {
       btnResetSelection.style.opacity = "";
@@ -476,7 +442,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".box.selected").forEach(x => x.classList.remove("selected"));
     if (elBox) elBox.classList.add("selected");
     else {
-      const found = document.querySelector(`.box[data-code="${opt.code}"]`);
+      const found = document.querySelector(.box[data-code="${opt.code}"]);
       if (found) found.classList.add("selected");
     }
 
@@ -491,7 +457,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
     if (!pending && state && state.matrixNeedsC) {
       error.style.color = "#b26a00";
-      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.`;
+      error.innerText = ⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.;
     } else if (!pending) {
       error.style.color = "";
       error.innerText = "";
@@ -547,8 +513,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!sameDowntime(ld, payload)) {
       return {
         ok:false,
-        msg:`Hay un "Tiempo Muerto" pendiente (${ld.opcion}${ld.texto ? " " + ld.texto : ""}).\n` +
-            `Solo podés enviar el MISMO tiempo muerto para cerrarlo, o enviar RM / RD.`
+        msg:Hay un "Tiempo Muerto" pendiente (${ld.opcion}${ld.texto ? " " + ld.texto : ""}).\n +
+            Solo podés enviar el MISMO tiempo muerto para cerrarlo, o enviar RM / RD.
       };
     }
 
@@ -557,17 +523,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ================= ACTUALIZAR ESTADO ================= */
   function pushLast2(s, payload) {
-    const item = {
-      opcion: payload.opcion,
-      descripcion: payload.descripcion,
-      texto: payload.texto || "",
-      ts: payload.tsEvent
-    };
-  
+    const item = { opcion:payload.opcion, descripcion:payload.descripcion, texto:payload.texto||"", ts:payload.tsEvent };
     s.last2.unshift(item);
-    s.last2 = s.last2.slice(0,5); // 👈 ahora guarda 5
+    s.last2 = s.last2.slice(0,2);
   }
-
 
   function updateStateAfterSend(legajo, payload) {
     const s = readStateForLegajo(legajo);
@@ -641,7 +600,7 @@ document.addEventListener("DOMContentLoaded", () => {
         signal: ctrl.signal
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(HTTP ${res.status});
       const data = await res.json().catch(()=>null);
       if (!data || data.ok !== true) throw new Error("Respuesta inválida del WebApp");
       return data;
@@ -714,7 +673,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     const day = todayISODateAR();
-    const hsInicioISO = `${day}T08:30:00-03:00`;
+    const hsInicioISO = ${day}T08:30:00-03:00;
 
     const tsEvent = isoNowSeconds();
     const latePayload = {
