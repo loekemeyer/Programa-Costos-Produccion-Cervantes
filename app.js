@@ -287,8 +287,10 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="t2">
             ${arr.slice(0,5).map(it => `
               <div style="margin-top:6px;">
-                <b>${it.opcion}</b> — ${it.descripcion}
-                ${it.texto ? ` | Dato: <b>${it.texto}</b>` : ""}
+                <span style="font-weight:800; font-size:40px;">
+                  ${it.opcion}${it.texto ? `: ${it.texto}` : ""}
+                </span>
+                ${it.descripcion ? ` <span>— ${it.descripcion}</span>` : ""}
                 ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
               </div>
             `).join("")}
