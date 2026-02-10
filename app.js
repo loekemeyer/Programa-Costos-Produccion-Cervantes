@@ -389,7 +389,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
     if (!pending && state && state.matrixNeedsC) {
       error.style.color = "#b26a00";
-      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenés que enviar al menos 1 Cajón (C).`;
+      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.`;
     }
 
     if (pending) {
@@ -455,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mensaje por regla de matriz (solo si no hay TM pendiente)
     if (!pending && state && state.matrixNeedsC) {
       error.style.color = "#b26a00";
-      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenés que enviar al menos 1 Cajón (C).`;
+      error.innerText = `⚠️ Para iniciar una nueva matriz (E), primero tenes que terminar la cantidad que hiciste en la matriz en curso primero tenes que terminar la cantidad que hiciste en la matriz en curso.`;
     } else if (!pending) {
       error.style.color = "";
       error.innerText = "";
