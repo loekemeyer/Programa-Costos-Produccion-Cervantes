@@ -57,7 +57,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const MIGRATION_FLAG = `prod_migrated${APP_TAG}${VERSION}`;
   const LS_PREFIX      = `prod_state${APP_TAG}${VERSION}`;
   const LS_QUEUE       = `prod_queue${APP_TAG}${VERSION}`;
+  const LS_FAILED      = `prod_failed${APP_TAG}${VERSION}`;
   const DAY_GUARD_KEY  = `prod_day_guard${APP_TAG}${VERSION}`;
+
 
   /* ================= RESET DIARIO ================= */
   function clearAllCervantesData() {
@@ -167,6 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
     {code:"CM",desc:"Cambiar Matriz",row:4,input:{show:false}},
     {code:"PM",desc:"Paré Matriz",row:4,input:{show:false}},
     {code:"RM",desc:"Rotura Matriz",row:4,input:{show:false}},
+    {code:"REM",desc:"Reparando Matriz",row:4,input:{show:false}},
     {code:"PC",desc:"Paré Comida",row:3,input:{show:false}},
     {code:"RD",desc:"Rollo Fleje Doblado",row:3,input:{show:false}}
   ];
@@ -252,6 +255,29 @@ document.addEventListener("DOMContentLoaded", () => {
   function queueLength() {
     return readQueue().length;
   }
+    /* ================= COLA FALLIDOS (no bloquear la cola) ================= */
+  function readFailed() {
+    try {
+      return JSON.parse(localStorage.getItem(LS_FAILED) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function writeFailed(arr) {
+    localStorage.setItem(LS_FAILED, JSON.stringify(arr.slice(-200)));
+  }
+
+  function moveToFailed(item, reason) {
+    const f = readFailed();
+    f.push({
+      ...item,
+      __failedAt: isoNowSeconds(),
+      __reason: String(reason || "")
+    });
+    writeFailed(f);
+  }
+
 
   /* ================= UI: RESUMEN ================= */
   function renderSummary() {
@@ -342,9 +368,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function isAllowedWhenPending(optCode, pending) {
     if (!pending) return true;
-    if (optCode === "RM" || optCode === "PM" || optCode === "RD") return true;
     return String(optCode) === String(pending.opcion);
   }
+
 
 
   // ✅ NUEVO: regla de matriz -> bloquea E hasta que exista al menos 1 C después del último E
@@ -415,7 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
         error.style.color = "#b26a00";
         error.innerText =
           `⚠️ Hay un Tiempo Muerto pendiente (${pending.opcion}). ` +
-          `Solo podés reenviar el mismo para cerrarlo, o enviar RM/RD.`;
+          `Solo podés reenviar el MISMO para cerrarlo.`;
       }
     } else {
       btnResetSelection.style.opacity = "";
@@ -517,9 +543,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!ld) return { ok:true };
 
-    if (payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
-      return { ok:true };
-    }
+    
 
     if (!sameDowntime(ld, payload)) {
       return {
@@ -597,28 +621,26 @@ document.addEventListener("DOMContentLoaded", () => {
   function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
   async function postToSheet(payload) {
-    // ✅ “simple request”: text/plain evita preflight en la mayoría de casos
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 12000);
-
-    try {
-      const res = await fetch(GOOGLE_SHEET_WEBAPP_URL, {
-        method:"POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
-        mode:"cors",
-        cache:"no-store",
-        signal: ctrl.signal
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json().catch(()=>null);
-      if (!data || data.ok !== true) throw new Error("Respuesta inválida del WebApp");
-      return data;
-    } finally {
-      clearTimeout(t);
+    const res = await fetch(GOOGLE_SHEET_WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+      mode: "cors",
+      cache: "no-store"
+    });
+  
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  
+    const data = await res.json().catch(() => null);
+  
+    // ✅ si Apps Script devuelve {ok:false,error:"..."} lo vas a conservar como error
+    if (!data || data.ok !== true) {
+      throw new Error(data?.error || "Respuesta inválida del WebApp");
     }
+  
+    return data;
   }
+  
 
   let isFlushing = false;
 
@@ -630,7 +652,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let q = readQueue();
       if (!q.length) return;
 
-      const batchMax = 3;
+      const batchMax = 15;
 
       for (let processed=0; processed<batchMax; processed++) {
         q = readQueue();
@@ -638,18 +660,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const item = q[0];
         const tries = Number(item.__tries || 0);
-        if (tries >= 10) break;
+
+        // ✅ Si llegó a 10 intentos, NO congelar la cola: lo movemos a fallidos y seguimos
+        if (tries >= 10) {
+          moveToFailed(item, "MAX_TRIES");
+          q.shift();
+          writeQueue(q);
+          continue;
+        }
+
 
         try {
           await postToSheet(item); // ✅ ahora espera OK real
           q.shift();
           writeQueue(q);
           await sleep(140);
-        } catch {
+        } catch (err) {
+          console.warn("postToSheet failed:", err);
+
           item.__tries = tries + 1;
           q[0] = item;
           writeQueue(q);
-          const backoff = Math.min(1500 * item.__tries, 12000);
+
+          const backoff = Math.min(2000 * item.__tries, 30000);
           await sleep(backoff);
           break;
         }
@@ -831,7 +864,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   window.addEventListener("focus", () => flushQueueOnce());
-  setInterval(() => flushQueueOnce(), 25000);
+  window.addEventListener("online", () => flushQueueOnce());
+  setInterval(() => flushQueueOnce(), 5000);
+
 
   /* ================= INIT ================= */
   renderOptions();
