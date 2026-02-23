@@ -71,11 +71,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!k) return;
       if (k.startsWith(statePrefix)) localStorage.removeItem(k);
     });
-
-    localStorage.removeItem(LS_QUEUE);
   }
 
-  const today = todayKeyAR();
+  const today = todayISODateAR();
   const lastDay = localStorage.getItem(DAY_GUARD_KEY);
   if (lastDay && lastDay !== today) {
     clearAllCervantesData();
@@ -91,8 +89,8 @@ document.addEventListener("DOMContentLoaded", () => {
       "prod_day_state_v7",
       "prod_state_ls_v1",
       "prod_queue_v1",
-      `prod_state${APP_TAG}${VERSION}`,
-      `prod_queue${APP_TAG}${VERSION}`,
+      // OJO: NO borrar `prod_state${APP_TAG}${VERSION}`
+      // OJO: NO borrar `prod_queue${APP_TAG}${VERSION}`
     ].forEach(k => localStorage.removeItem(k));
 
     localStorage.setItem(MIGRATION_FLAG, "1");
@@ -190,9 +188,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function stateKeyFor(legajo) {
-    return `${LS_PREFIX}::${todayKeyAR()}::${String(legajo).trim()}`;
+  return `${LS_PREFIX}::${todayISODateAR()}::${String(legajo).trim()}`;
   }
 
+  function stateKeyOldFor(legajo) {
+  //key vieja (la que usabas antes)
+  return `${LS_PREFIX}::${todayKeyAR()}::${String(legajo).trim()}`;
+  }
+  
   function freshState() {
     return {
       lastMatrix:null,
@@ -207,30 +210,54 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
  function readStateForLegajo(legajo) {
-  try {
-    const raw = localStorage.getItem(stateKeyFor(legajo));
-    if (!raw) return freshState();
-    const s = JSON.parse(raw);
-    if (!s || typeof s !== "object") return freshState();
-    s.last2 = Array.isArray(s.last2) ? s.last2 : [];
-    s.lastMatrix = s.lastMatrix || null;
-    s.lastCajon = s.lastCajon || null;
-    s.lastDowntime = s.lastDowntime || null;
-    s.lateArrivalSent = !!s.lateArrivalSent;
-
-    // ✅ NUEVOS FLAGS
-    s.lateArrivalDiscarded = !!s.lateArrivalDiscarded; // 👈 ESTA LÍNEA
-    s.matrixNeedsC = !!s.matrixNeedsC;
-
-    return s;
-  } catch {
-    return freshState();
+    try {
+      const newKey = stateKeyFor(legajo);
+  
+      // ✅ PASO 1 (CRÍTICO): primero intentar leer con key NUEVA
+      let raw = localStorage.getItem(newKey);
+  
+      // ✅ si no existe, recién ahí probar la key VIEJA y migrar
+      if (!raw) {
+        const oldKey = stateKeyOldFor(legajo);
+        const oldRaw = localStorage.getItem(oldKey);
+  
+        if (oldRaw) {
+          // copiar viejo -> nuevo
+          localStorage.setItem(newKey, oldRaw);
+  
+          // borrar viejo (para no duplicar)
+          localStorage.removeItem(oldKey);
+  
+          raw = oldRaw;
+        }
+      }
+  
+      if (!raw) return freshState();
+  
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== "object") return freshState();
+  
+      // normalizaciones defensivas
+      s.last2 = Array.isArray(s.last2) ? s.last2 : [];
+      s.lastMatrix = s.lastMatrix || null;
+      s.lastCajon = s.lastCajon || null;
+      s.lastDowntime = s.lastDowntime || null;
+      s.lateArrivalSent = !!s.lateArrivalSent;
+      s.lateArrivalDiscarded = !!s.lateArrivalDiscarded;
+      s.matrixNeedsC = !!s.matrixNeedsC;
+  
+      return s;
+    } catch {
+      return freshState();
+    }
   }
-}
-
-
+  
   function writeStateForLegajo(legajo, state) {
-    localStorage.setItem(stateKeyFor(legajo), JSON.stringify(state));
+    const newKey = stateKeyFor(legajo);
+    localStorage.setItem(newKey, JSON.stringify(state));
+  
+    // limpiar key vieja si existiera
+    try { localStorage.removeItem(stateKeyOldFor(legajo)); } catch {}
   }
 
   /* ================= COLA PENDIENTES ================= */
@@ -245,7 +272,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   function writeQueue(arr) {
-    localStorage.setItem(LS_QUEUE, JSON.stringify(arr.slice(-80)));
+    localStorage.setItem(LS_QUEUE, JSON.stringify(arr)); // sin slice
   }
   function enqueue(payload) {
     const q = readQueue();
