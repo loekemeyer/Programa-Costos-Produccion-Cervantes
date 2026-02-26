@@ -18,13 +18,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function todayKeyAR() {
-    return new Date().toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
-  }
-
-  function todayISODateAR() {
-    // YYYY-MM-DD en horario AR (estable)
-    return new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  function dayKeyAR() {
+    // YYYY-MM-DD siempre, en horario AR, sin depender del locale
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+  
+    const y = parts.find(p => p.type === "year")?.value || "0000";
+    const m = parts.find(p => p.type === "month")?.value || "00";
+    const d = parts.find(p => p.type === "day")?.value || "00";
+  
+    return `${y}-${m}-${d}`;
   }
 
   function nowMinutesAR() {
@@ -73,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  const today = todayISODateAR();
+  const today = dayKeyAR();
   const lastDay = localStorage.getItem(DAY_GUARD_KEY);
   if (lastDay && lastDay !== today) {
     clearAllCervantesData();
@@ -188,12 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function stateKeyFor(legajo) {
-  return `${LS_PREFIX}::${todayISODateAR()}::${String(legajo).trim()}`;
-  }
-
-  function stateKeyOldFor(legajo) {
-  //key vieja (la que usabas antes)
-  return `${LS_PREFIX}::${todayKeyAR()}::${String(legajo).trim()}`;
+    return `${LS_PREFIX}::${dayKeyAR()}::${String(legajo).trim()}`;
   }
   
   function freshState() {
@@ -205,39 +207,19 @@ document.addEventListener("DOMContentLoaded", () => {
       lateArrivalSent:false,
       lateArrivalDiscarded:false,
       // ✅ NUEVO: no permite nuevo E hasta que haya al menos 1 C
-      matrixNeedsC:false
+      matrixNeedsC:false,
+      pcDone: false // ✅
     };
   }
 
  function readStateForLegajo(legajo) {
     try {
-      const newKey = stateKeyFor(legajo);
-  
-      // ✅ PASO 1 (CRÍTICO): primero intentar leer con key NUEVA
-      let raw = localStorage.getItem(newKey);
-  
-      // ✅ si no existe, recién ahí probar la key VIEJA y migrar
-      if (!raw) {
-        const oldKey = stateKeyOldFor(legajo);
-        const oldRaw = localStorage.getItem(oldKey);
-  
-        if (oldRaw) {
-          // copiar viejo -> nuevo
-          localStorage.setItem(newKey, oldRaw);
-  
-          // borrar viejo (para no duplicar)
-          localStorage.removeItem(oldKey);
-  
-          raw = oldRaw;
-        }
-      }
-  
+      const raw = localStorage.getItem(stateKeyFor(legajo));
       if (!raw) return freshState();
   
       const s = JSON.parse(raw);
       if (!s || typeof s !== "object") return freshState();
   
-      // normalizaciones defensivas
       s.last2 = Array.isArray(s.last2) ? s.last2 : [];
       s.lastMatrix = s.lastMatrix || null;
       s.lastCajon = s.lastCajon || null;
@@ -245,6 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
       s.lateArrivalSent = !!s.lateArrivalSent;
       s.lateArrivalDiscarded = !!s.lateArrivalDiscarded;
       s.matrixNeedsC = !!s.matrixNeedsC;
+      s.pcDone = !!s.pcDone;
   
       return s;
     } catch {
@@ -253,11 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   
   function writeStateForLegajo(legajo, state) {
-    const newKey = stateKeyFor(legajo);
-    localStorage.setItem(newKey, JSON.stringify(state));
-  
-    // limpiar key vieja si existiera
-    try { localStorage.removeItem(stateKeyOldFor(legajo)); } catch {}
+    localStorage.setItem(stateKeyFor(legajo), JSON.stringify(state));
   }
 
   /* ================= COLA PENDIENTES ================= */
@@ -277,7 +256,13 @@ document.addEventListener("DOMContentLoaded", () => {
   function enqueue(payload) {
     const q = readQueue();
     q.push({ ...payload, __tries: 0 });
-    writeQueue(q);
+    try {
+      writeQueue(q);
+    } catch (e) {
+      alert("⚠️ Sin espacio local para guardar la cola. Avisar a Sistemas.");
+      console.error("QUEUE WRITE FAILED (QuotaExceeded):", e);
+      // opcional: revertir push si querés
+    }
   }
   function queueLength() {
     return readQueue().length;
@@ -673,6 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function flushQueueOnce() {
     if (isFlushing) return;
+    if (!navigator.onLine) return;
     isFlushing = true;
 
     try {
@@ -687,16 +673,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const item = q[0];
         const tries = Number(item.__tries || 0);
-
-        // ✅ Si llegó a 10 intentos, NO congelar la cola: lo movemos a fallidos y seguimos
-        if (tries >= 10) {
-          moveToFailed(item, "MAX_TRIES");
-          q.shift();
-          writeQueue(q);
-          continue;
-        }
-
-
         try {
           await postToSheet(item); // ✅ ahora espera OK real
           q.shift();
@@ -704,19 +680,21 @@ document.addEventListener("DOMContentLoaded", () => {
           await sleep(140);
         } catch (err) {
           console.warn("postToSheet failed:", err);
-
+        
           item.__tries = tries + 1;
           q[0] = item;
           writeQueue(q);
-
-          const backoff = Math.min(2000 * item.__tries, 30000);
+        
+          // backoff progresivo (máximo 60s)
+          const backoff = Math.min(1000 * item.__tries, 60000);
           await sleep(backoff);
-          break;
+          break; // corta el batch y reintenta en el próximo ciclo
         }
       }
     } finally {
       isFlushing = false;
       renderSummary();
+      console.log("QUEUE LEN:", readQueue().length, "FAILED LEN:", readFailed().length);
     }
   }
 
@@ -743,7 +721,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 
-    const day = todayISODateAR();
+    const day = dayKeyAR();
     const hsInicioISO = `${day}T08:30:00-03:00`;
 
     const tsEvent = isoNowSeconds();
