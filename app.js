@@ -60,6 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ================= KEYS (Cervantes) ================= */
   const APP_TAG = "_Cervantes";
   const VERSION = "_v1";
+  const MAX_DAY_HISTORY = 700; // historial del día por legajo (se borra al cambiar de día)
 
   const MIGRATION_FLAG = `prod_migrated${APP_TAG}${VERSION}`;
   const LS_PREFIX      = `prod_state${APP_TAG}${VERSION}`;
@@ -221,6 +222,22 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!s || typeof s !== "object") return freshState();
   
       s.last2 = Array.isArray(s.last2) ? s.last2 : [];
+      // ✅ Normaliza items viejos (compatibilidad con versiones anteriores)
+      s.last2 = s.last2.map(it => {
+        if (!it || typeof it !== "object") return it;
+        return {
+          id: it.id || "", // antes no existía
+          opcion: it.opcion || "",
+          descripcion: it.descripcion || "",
+          texto: it.texto || "",
+          ts: it.ts || it.tsEvent || "",
+          status: it.status || "sent", // lo viejo asumimos enviado
+          tries: Number(it.tries || 0),
+          lastError: it.lastError || "",
+          sentAt: it.sentAt || "",
+          failedAt: it.failedAt || ""
+        };
+      });
       s.lastMatrix = s.lastMatrix || null;
       s.lastCajon = s.lastCajon || null;
       s.lastDowntime = s.lastDowntime || null;
@@ -237,6 +254,18 @@ document.addEventListener("DOMContentLoaded", () => {
   
   function writeStateForLegajo(legajo, state) {
     localStorage.setItem(stateKeyFor(legajo), JSON.stringify(state));
+  }
+  function updateHistoryItem(legajo, eventId, patch) {
+    if (!legajo || !eventId) return;
+  
+    const s = readStateForLegajo(legajo);
+    if (!Array.isArray(s.last2) || !s.last2.length) return;
+  
+    const idx = s.last2.findIndex(x => x && x.id === eventId);
+    if (idx === -1) return;
+  
+    s.last2[idx] = { ...s.last2[idx], ...patch };
+    writeStateForLegajo(legajo, s);
   }
 
   /* ================= COLA PENDIENTES ================= */
@@ -258,6 +287,13 @@ document.addEventListener("DOMContentLoaded", () => {
     q.push({ ...payload, __tries: 0 });
     try {
       writeQueue(q);
+      // ✅ Registrar en historial del día como "queued" (pendiente)
+      const leg = String(payload.legajo || "").trim();
+      if (leg) {
+        const s = readStateForLegajo(leg);
+        pushLast2(s, payload, "queued", { tries: 0 });
+        writeStateForLegajo(leg, s);
+      }
     } catch (e) {
       alert("⚠️ Sin espacio local para guardar la cola. Avisar a Sistemas.");
       console.error("QUEUE WRITE FAILED (QuotaExceeded):", e);
@@ -317,33 +353,51 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>`;
     };
 
-    const renderLast5 = (arr) => {
-      if (!arr || !arr.length) {
-        return `<div class="day-item"><div class="t1">Últimos 5 mensajes del día</div><div class="t2">—</div></div>`;
-      }
-    
-      return `
-        <div class="day-item">
-          <div class="t1">Últimos 5 mensajes del día</div>
-          <div class="t2">
-            ${arr.slice(0,5).map(it => `
-              <div style="margin-top:6px;">
-                <span style="font-weight:800; font-size:40px;">
+    const renderHistory = (arr) => {
+    if (!arr || !arr.length) {
+      return `<div class="day-item"><div class="t1">Historial del día</div><div class="t2">—</div></div>`;
+    }
+  
+    const badge = (st) => {
+      const s = String(st || "").toLowerCase();
+      if (s === "sent")   return `<span style="padding:2px 8px;border-radius:999px;background:#e8fff0;color:#0b6b2c;font-weight:800;font-size:12px;">ENVIADO</span>`;
+      if (s === "queued") return `<span style="padding:2px 8px;border-radius:999px;background:#fff7e6;color:#8a5a00;font-weight:800;font-size:12px;">PENDIENTE</span>`;
+      if (s === "failed") return `<span style="padding:2px 8px;border-radius:999px;background:#ffecec;color:#9b1c1c;font-weight:800;font-size:12px;">ERROR</span>`;
+      if (s === "dead")   return `<span style="padding:2px 8px;border-radius:999px;background:#eee;color:#444;font-weight:800;font-size:12px;">NO ENVIADO</span>`;
+      return `<span style="padding:2px 8px;border-radius:999px;background:#eee;color:#444;font-weight:800;font-size:12px;">${s.toUpperCase()}</span>`;
+    };
+  
+    return `
+      <div class="day-item">
+        <div class="t1">Historial del día (${arr.length})</div>
+        <div class="t2" style="max-height:360px; overflow:auto; padding-right:6px;">
+          ${arr.map(it => `
+            <div style="margin-top:10px; padding-bottom:10px; border-bottom:1px solid rgba(0,0,0,.08);">
+              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <span style="font-weight:900; font-size:34px;">
                   ${it.opcion}${it.texto ? `: ${it.texto}` : ""}
                 </span>
-                ${it.descripcion ? ` <span>— ${it.descripcion}</span>` : ""}
-                ${it.ts ? `<br><span style="color:#555;">${formatDateTimeAR(it.ts)}</span>` : ""}
+                ${badge(it.status)}
+                ${it.tries ? `<span style="font-size:12px; color:#666;">intentos: ${it.tries}</span>` : ""}
               </div>
-            `).join("")}
-          </div>
-        </div>`;
-    };
+  
+              ${it.descripcion ? `<div>— ${it.descripcion}</div>` : ""}
+              ${it.ts ? `<div style="color:#555;">Evento: ${formatDateTimeAR(it.ts)}</div>` : ""}
+  
+              ${it.sentAt ? `<div style="color:#0b6b2c;">Enviado: ${formatDateTimeAR(it.sentAt)}</div>` : ""}
+              ${it.failedAt ? `<div style="color:#9b1c1c;">Último error: ${formatDateTimeAR(it.failedAt)}</div>` : ""}
+              ${it.lastError ? `<div style="color:#9b1c1c; font-size:12px;">${it.lastError}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      </div>`;
+  };
 
 
     daySummary.className = "";
     daySummary.innerHTML = [
       qLen ? `<div class="day-item"><div class="t1">Pendientes de envío</div><div class="t2"><b>${qLen}</b></div></div>` : "",
-      renderLast5(s.last2)
+      renderHistory(s.last2)
     ].join("");
 
   }
@@ -569,22 +623,34 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ================= ACTUALIZAR ESTADO ================= */
-  function pushLast2(s, payload) {
-    const item = { opcion:payload.opcion, descripcion:payload.descripcion, texto:payload.texto||"", ts:payload.tsEvent };
+  function pushLast2(s, payload, status = "queued", extra = {}) {
+    const item = {
+      id: payload.id,
+      opcion: payload.opcion,
+      descripcion: payload.descripcion,
+      texto: payload.texto || "",
+      ts: payload.tsEvent,      // momento del evento
+      status,                  // queued | sent | failed | dead
+      tries: extra.tries ?? 0,
+      lastError: extra.lastError ?? "",
+      sentAt: extra.sentAt ?? "",
+      failedAt: extra.failedAt ?? ""
+    };
+  
     s.last2.unshift(item);
-    s.last2 = s.last2.slice(0,5);
+    s.last2 = s.last2.slice(0, MAX_DAY_HISTORY);
   }
 
   function updateStateAfterSend(legajo, payload) {
     const s = readStateForLegajo(legajo);
 
     if (payload.opcion === "LT") {
-      pushLast2(s, payload);
+      
       writeStateForLegajo(legajo, s);
       return;
     }
 
-    pushLast2(s, payload);
+    
 
     if (payload.opcion === "E") {
       if (s.lastMatrix && String(s.lastMatrix.texto||"") !== String(payload.texto||"")) {
@@ -678,12 +744,27 @@ document.addEventListener("DOMContentLoaded", () => {
           q.shift();
           writeQueue(q);
           await sleep(140);
+          // ✅ Marcar como enviado
+          updateHistoryItem(item.legajo, item.id, {
+            status: "sent",
+            sentAt: isoNowSeconds(),
+            tries: Number(item.__tries || 0),
+            lastError: "",
+            failedAt: ""
+          });
         } catch (err) {
           console.warn("postToSheet failed:", err);
         
           item.__tries = tries + 1;
           q[0] = item;
           writeQueue(q);
+          // ✅ Marcar como error (sigue pendiente en cola)
+          updateHistoryItem(item.legajo, item.id, {
+            status: "failed",
+            failedAt: isoNowSeconds(),
+            tries: Number(item.__tries || 0),
+            lastError: String(err?.message || err)
+          });
         
           // backoff progresivo (máximo 60s)
           const backoff = Math.min(1000 * item.__tries, 60000);
