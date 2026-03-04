@@ -62,6 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const VERSION = "_v1";
   const MAX_DAY_HISTORY = 700; // historial del día por legajo (se borra al cambiar de día)
 
+
   const MIGRATION_FLAG = `prod_migrated${APP_TAG}${VERSION}`;
   const LS_PREFIX      = `prod_state${APP_TAG}${VERSION}`;
   const LS_QUEUE       = `prod_queue${APP_TAG}${VERSION}`;
@@ -145,13 +146,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const daySummary = $("daySummary");
   const matrizInfo = $("matrizInfo");
 
+  const btnReenviarPendientes = $("btnReenviarPendientes");
+  const pendingSection = $("pendingSection");
+  const pendingList = $("pendingList");
+
   const required = {
     legajoScreen, optionsScreen, legajoInput,
     btnContinuar, btnBackTop, btnBackLabel,
     row1, row2, row3,row4,
     selectedArea, selectedBox, selectedDesc, inputArea, inputLabel, textInput,
     btnResetSelection, btnEnviar, error,
-    daySummary, matrizInfo
+    daySummary, matrizInfo,
+    btnReenviarPendientes, pendingSection, pendingList
   };
   const missing = Object.entries(required).filter(([,v]) => !v).map(([k]) => k);
   if (missing.length) {
@@ -284,7 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   function enqueue(payload) {
     const q = readQueue();
-    q.push({ ...payload, __tries: 0 });
+    q.push({ ...payload, __tries: 0, __queuedAt: isoNowSeconds() });
     try {
       writeQueue(q);
       // ✅ Registrar en historial del día como "queued" (pendiente)
@@ -325,8 +331,52 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     writeFailed(f);
   }
-
-
+  /* ================= Cola de Pendientes ================= */
+  function renderPendingSection() {
+    const leg = legajoKey();
+    if (!leg) {
+      pendingSection.classList.add("hidden");
+      pendingList.innerHTML = "";
+      return;
+    }
+  
+    // Pendientes SOLO del legajo actual
+    const q = readQueue().filter(it => String(it.legajo || "").trim() === String(leg).trim());
+  
+    if (!q.length) {
+      pendingSection.classList.add("hidden");
+      pendingList.innerHTML = "";
+      return;
+    }
+  
+    pendingSection.classList.remove("hidden");
+  
+    pendingList.innerHTML = q.slice(0, 200).map(it => {
+      const op = String(it.opcion || "");
+      const tx = it.texto ? `: ${it.texto}` : "";
+      const tries = Number(it.__tries || 0);
+      const queuedAtISO = it.__queuedAt || it.tsEvent || "";
+      const queuedAt = queuedAtISO ? formatDateTimeAR(queuedAtISO) : "";
+      const nextTryAt = it.__nextTry ? formatDateTimeAR(new Date(it.__nextTry).toISOString()) : "";
+  
+      return `
+        <div style="padding:10px; border:1px solid rgba(0,0,0,.08); border-radius:12px; margin-top:8px;">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div style="font-weight:900; font-size:22px;">${op}${tx}</div>
+            <span style="padding:2px 8px;border-radius:999px;background:#fff7e6;color:#8a5a00;font-weight:800;font-size:12px;">PENDIENTE</span>
+            ${tries ? `<span style="font-size:12px; color:#666;">intentos: ${tries}</span>` : ""}
+          </div>
+  
+          ${queuedAt ? `<div style="color:#555; margin-top:4px;">En cola desde: ${queuedAt}</div>` : ""}
+          ${nextTryAt ? `<div style="color:#777; margin-top:2px; font-size:12px;">Próximo intento aprox: ${nextTryAt}</div>` : ""}
+        </div>
+      `;
+    }).join("");
+  
+    if (q.length > 200) {
+      pendingList.innerHTML += `<div style="margin-top:8px;color:#666;font-size:12px;">Mostrando 200 de ${q.length} pendientes.</div>`;
+    }
+  }
   /* ================= UI: RESUMEN ================= */
   function renderSummary() {
     const leg = legajoKey();
@@ -338,7 +388,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const s = readStateForLegajo(leg);
-    const qLen = queueLength();
+    const qAll = readQueue();
+    const qMine = qAll.filter(it => String(it.legajo || "").trim() === String(leg).trim());
+    const qLen = qMine.length;
+    btnReenviarPendientes.innerText = qLen ? `Reenviar pendientes (${qLen})` : "Reenviar pendientes";
+    btnReenviarPendientes.disabled = !qLen;
+    btnReenviarPendientes.style.opacity = qLen ? "1" : "0.6";
 
     const renderItem = (title, item) => {
       if (!item) return `<div class="day-item"><div class="t1">${title}</div><div class="t2">—</div></div>`;
@@ -399,7 +454,7 @@ document.addEventListener("DOMContentLoaded", () => {
       qLen ? `<div class="day-item"><div class="t1">Pendientes de envío</div><div class="t2"><b>${qLen}</b></div></div>` : "",
       renderHistory(s.last2)
     ].join("");
-
+    renderPendingSection();
   }
 
   function renderMatrizInfoForCajon() {
@@ -726,25 +781,42 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isFlushing) return;
     if (!navigator.onLine) return;
     isFlushing = true;
-
+  
     try {
       let q = readQueue();
       if (!q.length) return;
-
+  
       const batchMax = 15;
-
-      for (let processed=0; processed<batchMax; processed++) {
+      let processed = 0;
+      let safety = 0;
+  
+      // Procesa hasta batchMax items "enviados ok"
+      while (processed < batchMax) {
         q = readQueue();
         if (!q.length) break;
-
+  
+        // safety: evita loop infinito si todo está en backoff
+        safety++;
+        if (safety > q.length * 2 + 20) break;
+  
         const item = q[0];
-        const tries = Number(item.__tries || 0);
-        try {
-          await postToSheet(item); // ✅ ahora espera OK real
-          q.shift();
+  
+        // Respetar backoff por item
+        const now = Date.now();
+        const nextTry = Number(item.__nextTry || 0);
+        if (nextTry && now < nextTry) {
+          // Todavía no toca -> mover al final y probar el siguiente
+          q.push(q.shift());
           writeQueue(q);
-          await sleep(140);
-          // ✅ Marcar como enviado
+          continue;
+        }
+  
+        const tries = Number(item.__tries || 0);
+  
+        try {
+          await postToSheet(item);
+  
+          // ✅ Enviado OK
           updateHistoryItem(item.legajo, item.id, {
             status: "sent",
             sentAt: isoNowSeconds(),
@@ -752,29 +824,44 @@ document.addEventListener("DOMContentLoaded", () => {
             lastError: "",
             failedAt: ""
           });
+  
+          // Sacar de la cola
+          q.shift();
+          writeQueue(q);
+  
+          processed++;
+          await sleep(140);
+  
         } catch (err) {
           console.warn("postToSheet failed:", err);
-        
+  
+          // Incrementar tries y setear backoff por item
           item.__tries = tries + 1;
-          q[0] = item;
-          writeQueue(q);
-          // ✅ Marcar como error (sigue pendiente en cola)
+  
+          const backoff = Math.min(1000 * item.__tries, 60000);
+          item.__nextTry = Date.now() + backoff;
+  
+          // Guardar error en historial
           updateHistoryItem(item.legajo, item.id, {
             status: "failed",
             failedAt: isoNowSeconds(),
             tries: Number(item.__tries || 0),
             lastError: String(err?.message || err)
           });
-        
-          // backoff progresivo (máximo 60s)
-          const backoff = Math.min(1000 * item.__tries, 60000);
-          await sleep(backoff);
-          break; // corta el batch y reintenta en el próximo ciclo
+  
+          // Reemplazar item actualizado en cola y mover al final
+          q[0] = item;
+          q.push(q.shift());
+          writeQueue(q);
+  
+          // ✅ clave: no cortar todo, seguir con el siguiente
+          continue;
         }
       }
     } finally {
       isFlushing = false;
       renderSummary();
+      renderPendingSection();
       console.log("QUEUE LEN:", readQueue().length, "FAILED LEN:", readFailed().length);
     }
   }
@@ -953,10 +1040,25 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("online", () => flushQueueOnce());
   setInterval(() => flushQueueOnce(), 5000);
 
+  btnReenviarPendientes.addEventListener("click", async () => {
+    btnReenviarPendientes.disabled = true;
+    const prev = btnReenviarPendientes.innerText;
+    btnReenviarPendientes.innerText = "Reintentando...";
+  
+    try {
+      await flushQueueOnce();
+    } finally {
+      btnReenviarPendientes.disabled = false;
+      btnReenviarPendientes.innerText = prev;
+      renderSummary();
+      renderPendingSection();
+    }
+  });
 
   /* ================= INIT ================= */
   renderOptions();
   renderSummary();
+  renderPendingSection();
 
   console.log("app.js OK ✅ (bloqueo E hasta C + confirmación real + reset diario + keys _Cervantes_v1)");
 
