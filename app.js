@@ -161,10 +161,11 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   const missing = Object.entries(required).filter(([,v]) => !v).map(([k]) => k);
   if (missing.length) {
-    console.error("FALTAN ELEMENTOS EN EL HTML (ids):", missing);
-    alert("Error: faltan elementos en el HTML. Mirá consola (F12).");
-    return;
-  }
+  const msg = "FALTAN ELEMENTOS HTML: " + missing.join(", ");
+  console.error(msg);
+  alert(msg);  // 👈 esto se va a ver en el celular
+  return;
+}
 
   /* ================= OPCIONES ================= */
   const OPTIONS = [
