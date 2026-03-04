@@ -161,11 +161,11 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   const missing = Object.entries(required).filter(([,v]) => !v).map(([k]) => k);
   if (missing.length) {
-  const msg = "FALTAN ELEMENTOS HTML: " + missing.join(", ");
-  console.error(msg);
-  alert(msg);  // 👈 esto se va a ver en el celular
-  return;
-}
+    const msg = "FALTAN ELEMENTOS HTML: " + missing.join(", ");
+    console.error(msg);
+    alert(msg);  // 👈 esto se va a ver en el celular
+    return;
+  }
 
   /* ================= OPCIONES ================= */
   const OPTIONS = [
