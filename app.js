@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const daySummary = $("daySummary");
   const matrizInfo = $("matrizInfo");
 
-  const btnReenviarPendientes = $("btnReenviarPendientes");
+  
   const pendingSection = $("pendingSection");
   const pendingList = $("pendingList");
 
@@ -157,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
     selectedArea, selectedBox, selectedDesc, inputArea, inputLabel, textInput,
     btnResetSelection, btnEnviar, error,
     daySummary, matrizInfo,
-    btnReenviarPendientes, pendingSection, pendingList
+    pendingSection, pendingList
   };
   const missing = Object.entries(required).filter(([,v]) => !v).map(([k]) => k);
   if (missing.length) {
@@ -391,9 +391,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const qAll = readQueue();
     const qMine = qAll.filter(it => String(it.legajo || "").trim() === String(leg).trim());
     const qLen = qMine.length;
-    btnReenviarPendientes.innerText = qLen ? `Reenviar pendientes (${qLen})` : "Reenviar pendientes";
-    btnReenviarPendientes.disabled = !qLen;
-    btnReenviarPendientes.style.opacity = qLen ? "1" : "0.6";
 
     const renderItem = (title, item) => {
       if (!item) return `<div class="day-item"><div class="t1">${title}</div><div class="t2">—</div></div>`;
@@ -777,7 +774,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let isFlushing = false;
 
-  async function flushQueueOnce() {
+  async function flushQueueOnce({ aggressive = false } = {}) {
     if (isFlushing) return;
     if (!navigator.onLine) return;
     isFlushing = true;
@@ -786,26 +783,23 @@ document.addEventListener("DOMContentLoaded", () => {
       let q = readQueue();
       if (!q.length) return;
   
-      const batchMax = 15;
+      const batchMax = aggressive ? 200 : 15;      // ✅ más grande cuando vuelve conexión
+      const perItemDelay = aggressive ? 20 : 140;  // ✅ acelera
       let processed = 0;
       let safety = 0;
   
-      // Procesa hasta batchMax items "enviados ok"
       while (processed < batchMax) {
         q = readQueue();
         if (!q.length) break;
   
-        // safety: evita loop infinito si todo está en backoff
         safety++;
         if (safety > q.length * 2 + 20) break;
   
         const item = q[0];
   
-        // Respetar backoff por item
         const now = Date.now();
         const nextTry = Number(item.__nextTry || 0);
         if (nextTry && now < nextTry) {
-          // Todavía no toca -> mover al final y probar el siguiente
           q.push(q.shift());
           writeQueue(q);
           continue;
@@ -816,7 +810,6 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
           await postToSheet(item);
   
-          // ✅ Enviado OK
           updateHistoryItem(item.legajo, item.id, {
             status: "sent",
             sentAt: isoNowSeconds(),
@@ -825,23 +818,20 @@ document.addEventListener("DOMContentLoaded", () => {
             failedAt: ""
           });
   
-          // Sacar de la cola
           q.shift();
           writeQueue(q);
   
           processed++;
-          await sleep(140);
+          await sleep(perItemDelay);
   
         } catch (err) {
-          console.warn("postToSheet failed:", err);
-  
-          // Incrementar tries y setear backoff por item
           item.__tries = tries + 1;
   
-          const backoff = Math.min(1000 * item.__tries, 60000);
+          // ✅ backoff más corto en modo agresivo (para “vaciar en segundos”)
+          const maxBackoff = aggressive ? 5000 : 60000;
+          const backoff = Math.min(1000 * item.__tries, maxBackoff);
           item.__nextTry = Date.now() + backoff;
   
-          // Guardar error en historial
           updateHistoryItem(item.legajo, item.id, {
             status: "failed",
             failedAt: isoNowSeconds(),
@@ -849,12 +839,9 @@ document.addEventListener("DOMContentLoaded", () => {
             lastError: String(err?.message || err)
           });
   
-          // Reemplazar item actualizado en cola y mover al final
           q[0] = item;
           q.push(q.shift());
           writeQueue(q);
-  
-          // ✅ clave: no cortar todo, seguir con el siguiente
           continue;
         }
       }
@@ -862,7 +849,6 @@ document.addEventListener("DOMContentLoaded", () => {
       isFlushing = false;
       renderSummary();
       renderPendingSection();
-      console.log("QUEUE LEN:", readQueue().length, "FAILED LEN:", readFailed().length);
     }
   }
 
@@ -915,27 +901,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function sendFast() {
     if (!selected) return;
-
+  
     const legajo = legajoKey();
     if (!legajo) { alert("Ingresá el número de legajo"); return; }
-
+  
     maybeSendLateArrival(legajo);
-
+  
     const texto = String(textInput.value || "").trim();
-
-   // ✅ Validación dinámica según matriz (solo afecta a C)
+  
+    // ✅ Validación dinámica según matriz (solo afecta a C)
     if (selected.input.show) {
       const stateTmp = readStateForLegajo(legajo);
-    
+  
       let ok = true;
       if (selected.code === "C" && isMatrix501(stateTmp)) {
-        // Matriz 501: permite 123,5 o 123.5
         ok = /^\d+(?:[.,]\d+)?$/.test(texto);
       } else {
-        // Resto (incluye E y C no-501): solo enteros
         ok = /^[0-9]+$/.test(texto);
       }
-    
+  
       if (!ok) {
         error.style.color = "red";
         error.innerText = (selected.code === "C" && isMatrix501(stateTmp))
@@ -944,23 +928,22 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
     }
-
-
+  
     const tsEvent = isoNowSeconds();
     const stateBefore = readStateForLegajo(legajo);
-
-    // ✅ NUEVO: no permitir nuevo E si falta al menos un C luego del E anterior
+  
+    // ✅ no permitir nuevo E si falta al menos un C luego del E anterior
     if (selected.code === "E" && stateBefore.matrixNeedsC) {
       alert('Antes de iniciar una nueva matriz (E), tenés que enviar al menos 1 Cajón (C) para cerrar la matriz anterior.');
       return;
     }
-
-    // ✅ Si es Cajón (C) y matriz 501, normaliza punto->coma antes de guardar/enviar
+  
+    // ✅ normaliza C si matriz 501
     let textoToSend = texto;
     if (selected.code === "C" && isMatrix501(stateBefore)) {
       textoToSend = normalizeToComma(texto);
     }
-    
+  
     const payload = {
       id: uuidv4(),
       legajo,
@@ -971,8 +954,7 @@ document.addEventListener("DOMContentLoaded", () => {
       "Hs Inicio": "",
       matriz: ""
     };
-
-
+  
     if (payload.opcion === "C" || payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
       if (!stateBefore.lastMatrix || !stateBefore.lastMatrix.ts || !stateBefore.lastMatrix.texto) {
         alert('Primero tenés que enviar "E (Empecé Matriz)" para registrar una matriz.');
@@ -980,45 +962,51 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       payload.matriz = String(stateBefore.lastMatrix.texto || "").trim();
     }
-
+  
     if (payload.opcion === "C") {
       payload["Hs Inicio"] = computeHsInicioForC(stateBefore);
     }
-
+  
     if (payload.opcion === "RM" || payload.opcion === "PM" || payload.opcion === "RD") {
       payload["Hs Inicio"] = tsEvent;
     }
-
-
+  
     const v = validateBeforeSend(legajo, payload);
     if (!v.ok) { alert(v.msg); return; }
-
+  
     if (v.isSecondSameDowntime) {
       payload["Hs Inicio"] = v.downtimeTs || "";
     }
-
+  
     btnEnviar.disabled = true;
     const prev = btnEnviar.innerText;
     btnEnviar.innerText = "Enviando...";
-
+  
+    // ✅ 1) Guardar estado local (rápido)
     updateStateAfterSend(legajo, payload);
+  
+    // ✅ 2) Guardar en cola LO ANTES POSIBLE (cierra el “agujero” si cierran la pestaña)
+    enqueue(payload);
+  
+    // ✅ 3) Recién ahora UI (si se corta acá, ya está persistido)
     renderSummary();
-
+  
     selected = null;
     selectedArea.classList.add("hidden");
     optionsScreen.classList.add("hidden");
     legajoScreen.classList.remove("hidden");
     matrizInfo.classList.add("hidden");
     matrizInfo.innerHTML = "";
-    // ✅ no pisar mensaje cuando volvés (el resumen ya lo muestra)
     error.innerText = "";
     document.querySelectorAll(".box.selected").forEach(x => x.classList.remove("selected"));
-
-    enqueue(payload);
-    await flushQueueOnce();
-
-    btnEnviar.disabled = false;
-    btnEnviar.innerText = prev;
+  
+    // ✅ 4) Intentar enviar (si falla, queda en cola)
+    try {
+      await flushQueueOnce({ aggressive: true });
+    } finally {
+      btnEnviar.disabled = false;
+      btnEnviar.innerText = prev;
+    }
   }
 
   /* ================= EVENTOS ================= */
@@ -1036,24 +1024,23 @@ document.addEventListener("DOMContentLoaded", () => {
     legajoTimer = setTimeout(renderSummary, 120);
   });
 
-  window.addEventListener("focus", () => flushQueueOnce());
-  window.addEventListener("online", () => flushQueueOnce());
-  setInterval(() => flushQueueOnce(), 5000);
-
-  btnReenviarPendientes.addEventListener("click", async () => {
-    btnReenviarPendientes.disabled = true;
-    const prev = btnReenviarPendientes.innerText;
-    btnReenviarPendientes.innerText = "Reintentando...";
-  
-    try {
-      await flushQueueOnce();
-    } finally {
-      btnReenviarPendientes.disabled = false;
-      btnReenviarPendientes.innerText = prev;
-      renderSummary();
-      renderPendingSection();
-    }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") flushQueueOnce({ aggressive: true });
   });
+  window.addEventListener("focus", () => flushQueueOnce({ aggressive: true }));
+    window.addEventListener("online", async () => {
+      // ráfagas por ~3 segundos para vaciar rápido sin colgar todo
+      const end = Date.now() + 3000;
+      while (Date.now() < end && readQueue().length) {
+        await flushQueueOnce({ aggressive: true });
+      }
+    });
+ setInterval(() => {
+    const hasQueue = readQueue().length > 0;
+    flushQueueOnce({ aggressive: hasQueue }); // si hay cola, acelera
+  }, 5000);
+
+  
 
   /* ================= INIT ================= */
   renderOptions();
