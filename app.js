@@ -233,12 +233,15 @@ document.addEventListener("DOMContentLoaded", () => {
       s.last2 = s.last2.map(it => {
         if (!it || typeof it !== "object") return it;
         return {
-          id: it.id || "", // antes no existía
+          id: it.id || "",
+          legajo: it.legajo || "",
           opcion: it.opcion || "",
           descripcion: it.descripcion || "",
           texto: it.texto || "",
           ts: it.ts || it.tsEvent || "",
-          status: it.status || "sent", // lo viejo asumimos enviado
+          hsInicio: it.hsInicio || it["Hs Inicio"] || "",
+          matriz: it.matriz || "",
+          status: it.status || "sent",
           tries: Number(it.tries || 0),
           lastError: it.lastError || "",
           sentAt: it.sentAt || "",
@@ -287,13 +290,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   function writeQueue(arr) {
-    localStorage.setItem(LS_QUEUE, JSON.stringify(arr)); // sin slice
+    localStorage.setItem(LS_QUEUE, JSON.stringify(arr));
+  }
+  function appendQueueItems(items) {
+    const current = readQueue();
+    const map = new Map();
+  
+    [...current, ...items].forEach(item => {
+      if (!item || !item.id) return;
+      map.set(item.id, item);
+    });
+  
+    writeQueue(Array.from(map.values()));
+  }
+  function reconcileQueueFromHistory(legajo) {
+    if (!legajo) return;
+  
+    const s = readStateForLegajo(legajo);
+    const q = readQueue();
+    const idsInQueue = new Set(q.map(x => x.id));
+    const missingItems = [];
+  
+    for (const it of (s.last2 || [])) {
+      if (!it || !it.id) continue;
+  
+      const isUnsent = it.status === "queued" || it.status === "failed";
+      if (!isUnsent) continue;
+      if (idsInQueue.has(it.id)) continue;
+  
+      missingItems.push({
+        id: it.id,
+        legajo: it.legajo || legajo,
+        opcion: it.opcion,
+        descripcion: it.descripcion,
+        texto: it.texto || "",
+        tsEvent: it.ts || isoNowSeconds(),
+        "Hs Inicio": it.hsInicio || "",
+        matriz: it.matriz || "",
+        __tries: Number(it.tries || 0),
+        __queuedAt: isoNowSeconds()
+      });
+    }
+  
+    if (missingItems.length) {
+      appendQueueItems(missingItems);
+    }
   }
   function enqueue(payload) {
-    const q = readQueue();
-    q.push({ ...payload, __tries: 0, __queuedAt: isoNowSeconds() });
+    const item = { ...payload, __tries: 0, __queuedAt: isoNowSeconds() };
+  
     try {
-      writeQueue(q);
+      appendQueueItems([item]);
+  
       // ✅ Registrar en historial del día como "queued" (pendiente)
       const leg = String(payload.legajo || "").trim();
       if (leg) {
@@ -304,7 +352,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       alert("⚠️ Sin espacio local para guardar la cola. Avisar a Sistemas.");
       console.error("QUEUE WRITE FAILED (QuotaExceeded):", e);
-      // opcional: revertir push si querés
     }
   }
   function queueLength() {
@@ -381,6 +428,7 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ================= UI: RESUMEN ================= */
   function renderSummary() {
     const leg = legajoKey();
+    if (leg) reconcileQueueFromHistory(leg);
 
     if (!leg) {
       daySummary.className = "history-empty";
@@ -391,7 +439,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const s = readStateForLegajo(leg);
     const qAll = readQueue();
     const qMine = qAll.filter(it => String(it.legajo || "").trim() === String(leg).trim());
-    const qLen = qMine.length;
+    const historyPending = (s.last2 || []).filter(it => it.status === "queued" || it.status === "failed");
+    const qLen = Math.max(qMine.length, historyPending.length);
 
     const renderItem = (title, item) => {
       if (!item) return `<div class="day-item"><div class="t1">${title}</div><div class="t2">—</div></div>`;
@@ -679,11 +728,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function pushLast2(s, payload, status = "queued", extra = {}) {
     const item = {
       id: payload.id,
+      legajo: payload.legajo || "",
       opcion: payload.opcion,
       descripcion: payload.descripcion,
       texto: payload.texto || "",
-      ts: payload.tsEvent,      // momento del evento
-      status,                  // queued | sent | failed | dead
+      ts: payload.tsEvent,
+      hsInicio: payload["Hs Inicio"] || "",
+      matriz: payload.matriz || "",
+      status,
       tries: extra.tries ?? 0,
       lastError: extra.lastError ?? "",
       sentAt: extra.sentAt ?? "",
