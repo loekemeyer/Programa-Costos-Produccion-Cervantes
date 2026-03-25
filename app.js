@@ -71,22 +71,95 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   /* ================= RESET DIARIO ================= */
-  function clearAllCervantesData() {
+  function rolloverCervantesData(prevDay, newDay) {
     const statePrefix = `${LS_PREFIX}::`;
     const keys = [];
-    for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
-
+  
+    for (let i = 0; i < localStorage.length; i++) {
+      keys.push(localStorage.key(i));
+    }
+  
     keys.forEach(k => {
-      if (!k) return;
-      if (k.startsWith(statePrefix)) localStorage.removeItem(k);
+      if (!k || !k.startsWith(statePrefix)) return;
+  
+      // k = prod_state_Cervantes_v1::YYYY-MM-DD::legajo
+      const parts = k.split("::");
+      const day = parts[1];
+      const legajo = parts[2];
+  
+      if (!day || !legajo) return;
+      if (day === newDay) return; // no tocar el día actual
+  
+      let oldState;
+      try {
+        oldState = JSON.parse(localStorage.getItem(k) || "{}");
+      } catch {
+        oldState = {};
+      }
+  
+      const last2 = Array.isArray(oldState.last2) ? oldState.last2 : [];
+      const unsent = last2.filter(it =>
+        it && (it.status === "queued" || it.status === "failed")
+      );
+  
+      const allSentOrEmpty = last2.length === 0 || last2.every(it =>
+        it && it.status === "sent"
+      );
+  
+      // Si todo estaba enviado, borrar sin más
+      if (allSentOrEmpty) {
+        localStorage.removeItem(k);
+        return;
+      }
+  
+      // Si hay pendientes/error, migrarlos al nuevo día
+      const newKey = `${LS_PREFIX}::${newDay}::${legajo}`;
+  
+      let newState;
+      try {
+        newState = JSON.parse(localStorage.getItem(newKey) || "null");
+      } catch {
+        newState = null;
+      }
+  
+      if (!newState || typeof newState !== "object") {
+        newState = freshState();
+      }
+  
+      const existing = Array.isArray(newState.last2) ? newState.last2 : [];
+      const existingIds = new Set(existing.map(x => x?.id).filter(Boolean));
+  
+      const merged = [...unsent.filter(x => !existingIds.has(x.id)), ...existing]
+        .slice(0, MAX_DAY_HISTORY);
+  
+      newState.last2 = merged;
+  
+      // NO arrastro lastMatrix / lastCajon / lastDowntime al día nuevo
+      // para no mezclar producción de ayer con hoy
+  
+      writeStateForLegajoRaw(newKey, newState);
+  
+      // borrar el estado viejo luego de migrar
+      localStorage.removeItem(k);
     });
   }
 
   const today = dayKeyAR();
   const lastDay = localStorage.getItem(DAY_GUARD_KEY);
+  
   if (lastDay && lastDay !== today) {
-    clearAllCervantesData();
+    rolloverCervantesData(lastDay, today);
+    // reconstruir cola desde historial migrado
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(LS_PREFIX)) continue;
+    
+      const parts = k.split("::");
+      const legajo = parts[2];
+      if (legajo) reconcileQueueFromHistory(legajo);
+    }
   }
+  
   localStorage.setItem(DAY_GUARD_KEY, today);
 
   /* ================= LIMPIEZA (1 vez) ================= */
@@ -265,6 +338,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function writeStateForLegajo(legajo, state) {
     localStorage.setItem(stateKeyFor(legajo), JSON.stringify(state));
   }
+  function writeStateForLegajoRaw(key, state) {
+    localStorage.setItem(key, JSON.stringify(state));
+  }
   function updateHistoryItem(legajo, eventId, patch) {
     if (!legajo || !eventId) return;
   
@@ -291,6 +367,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   function writeQueue(arr) {
     localStorage.setItem(LS_QUEUE, JSON.stringify(arr));
+  }
+  function getSortableQueue(arr) {
+    return [...arr].sort((a, b) => {
+      const ta = new Date(a?.tsEvent || a?.__queuedAt || 0).getTime();
+      const tb = new Date(b?.tsEvent || b?.__queuedAt || 0).getTime();
+      return ta - tb; // más antiguo primero
+    });
   }
   function appendQueueItems(items) {
     const current = readQueue();
@@ -836,27 +919,24 @@ document.addEventListener("DOMContentLoaded", () => {
       let q = readQueue();
       if (!q.length) return;
   
-      const batchMax = aggressive ? 200 : 15;      // ✅ más grande cuando vuelve conexión
-      const perItemDelay = aggressive ? 20 : 140;  // ✅ acelera
+      const batchMax = aggressive ? 200 : 15;
+      const perItemDelay = aggressive ? 20 : 140;
       let processed = 0;
-      let safety = 0;
   
       while (processed < batchMax) {
         q = readQueue();
         if (!q.length) break;
   
-        safety++;
-        if (safety > q.length * 2 + 20) break;
-  
-        const item = q[0];
-  
+        // ordenar siempre del más antiguo al más nuevo
+        const sorted = getSortableQueue(q);
         const now = Date.now();
-        const nextTry = Number(item.__nextTry || 0);
-        if (nextTry && now < nextTry) {
-          q.push(q.shift());
-          writeQueue(q);
-          continue;
-        }
+  
+        // buscar el más antiguo que ya esté listo para enviar
+        const item = sorted.find(x => !x.__nextTry || Number(x.__nextTry) <= now);
+        if (!item) break; // todos están esperando backoff
+  
+        const idx = q.findIndex(x => x.id === item.id);
+        if (idx === -1) break;
   
         const tries = Number(item.__tries || 0);
   
@@ -866,12 +946,12 @@ document.addEventListener("DOMContentLoaded", () => {
           updateHistoryItem(item.legajo, item.id, {
             status: "sent",
             sentAt: isoNowSeconds(),
-            tries: Number(item.__tries || 0),
+            tries: tries,
             lastError: "",
             failedAt: ""
           });
   
-          q.shift();
+          q.splice(idx, 1);
           writeQueue(q);
   
           processed++;
@@ -880,7 +960,6 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (err) {
           item.__tries = tries + 1;
   
-          // ✅ backoff más corto en modo agresivo (para “vaciar en segundos”)
           const maxBackoff = aggressive ? 5000 : 60000;
           const backoff = Math.min(1000 * item.__tries, maxBackoff);
           item.__nextTry = Date.now() + backoff;
@@ -888,14 +967,12 @@ document.addEventListener("DOMContentLoaded", () => {
           updateHistoryItem(item.legajo, item.id, {
             status: "failed",
             failedAt: isoNowSeconds(),
-            tries: Number(item.__tries || 0),
+            tries: item.__tries,
             lastError: String(err?.message || err)
           });
   
-          q[0] = item;
-          q.push(q.shift());
+          q[idx] = item;
           writeQueue(q);
-          continue;
         }
       }
     } finally {
